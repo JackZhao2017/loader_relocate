@@ -12,7 +12,7 @@ extern "C" {
 class loader_phdr
 {
 public:
-	loader_phdr(Elf32_Addr base);
+	loader_phdr(int fd);
 	~loader_phdr();
 
   	size_t phdr_count() { return phdr_num_; }

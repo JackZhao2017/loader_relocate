@@ -30,7 +30,7 @@
                                       MAYBE_MAP_FLAG((x), PF_R, PROT_READ) | \
                                       MAYBE_MAP_FLAG((x), PF_W, PROT_WRITE))
 
-loader_phdr::loader_phdr(Elf32_Addr base)
+loader_phdr::loader_phdr(int fd)
 {
 	memset(&elf_header,0,sizeof(Elf32_Ehdr));
 	phdr_num_=0;
@@ -45,7 +45,7 @@ loader_phdr::~loader_phdr()
 
 bool loader_phdr::ReadElfHeader()
 {
-	//read(mfd,&elf_header,sizeof(Elf32_Ehdr));
+	read(mfd,&elf_header,sizeof(Elf32_Ehdr));
 	//memcpy(&elf_header,base,sizeof(Elf32_Ehdr));
 	return true;
 }
