@@ -144,7 +144,6 @@ static unsigned elfhash(const char* _name) {
 static ElfW(Sym)* soinfo_do_lookup(soinfo* si, const char* name, soinfo** lsi, soinfo* needed[]) {
     unsigned elf_hash = elfhash(name);
     ElfW(Sym)* s = NULL;
-
     if (si != NULL ){
 
         /* Look for symbols in the local scope (the object who is
@@ -555,47 +554,27 @@ static bool soinfo_link_image(soinfo* si) {
         }
     }
 
-    soinfo* neededso = reinterpret_cast<soinfo*>(malloc((1 + needed_count) * sizeof(soinfo)));
-    soinfo** needed   = reinterpret_cast<soinfo**>(malloc((1 + needed_count) * sizeof(soinfo*)));
+     soinfo** needed = reinterpret_cast<soinfo**>(alloca((1+needed_count) * sizeof(soinfo*)));
+     soinfo** pneeded = needed;
 
-    soinfo** pneeded = needed;
-    int i=0;
+     for (ElfW(Dyn)* d = si->dynamic; d->d_tag != DT_NULL; ++d) {
+         if (d->d_tag == DT_NEEDED) {
+             const char* library_name = si->strtab + d->d_un.d_val;
 
-    for (ElfW(Dyn)* d = si->dynamic; d->d_tag != DT_NULL; ++d) {
-        if (d->d_tag == DT_NEEDED) {
-            const char* library_name = si->strtab + d->d_un.d_val;
-            loader_addr loaderaddr;
-            loaderaddr.openmaps();
-
-            int libkersize =0;
-            unsigned int addr=0;
-            Elf32_Addr so_addr=0;
-
-            while((addr = loaderaddr.getParsePage(library_name,&libkersize))!=0)
-            {
-                // debug_msg("addr 0x%x  size %d \n",addr,libkersize);
-                if(addr!=NULL)
-                {
-                    so_addr=(Elf32_Addr)addr;
-                    //printf("addr 0x%x\n",addr);
-                    break;
-                }                    
-            }
-            if(so_addr){
-
-              needed[i]=&neededso[i];
-              ++i;
-              loaderaddr.load_needed_soinfo(*pneeded,(unsigned char *)so_addr,libkersize);
-              memcpy((*pneeded)->name,library_name,strlen(library_name)); 
-              init_msg("needs %s soinfo addr 0x%08x\n",library_name,addr);
-              *pneeded++ ;
-            }else{
-              init_msg("not found needs %s soinfo addr 0x%08x\n",library_name,addr);
-            }
-            loaderaddr.closemaps();         
-        }
-    }
-    
+             void *handle = dlopen(library_name,RTLD_NOW);
+             if(handle ==NULL){
+                  break;
+             }
+             soinfo *tsi= (soinfo*)handle;
+             init_msg("needs %s base 0x%08x\n",library_name,tsi->base);
+             if(tsi->base!=0){
+                 *pneeded++ = tsi;
+              }else{
+                 *pneeded++ = NULL;
+              }
+             //dlclose(handle); 
+         }
+     }   
     pneeded = NULL;
     
 #if defined(USE_RELA)
@@ -644,9 +623,7 @@ void  start_load(void)
     fstat(fd, &file_stat);
 
     
-    
-
-
+  
     soinfo* si = soinfo_alloc(&file_stat);
     if(si==NULL){
        err_msg("soinfo_alloc faild\n");
@@ -684,25 +661,12 @@ void  start_load(void)
     unsigned int addr=0;
     Elf32_Addr lib_soinfo_addr=0;
 
-    g_loaderaddr.openmaps();
+    void *handle =dlopen("libfirstshared.so",RTLD_NOW);
 
-    while((addr = g_loaderaddr.getParsePage(NULL,&libkersize))!=0)
-    {
-        debug_msg("addr 0x%x  size %d \n",addr,libkersize);
-        unsigned char * sub =g_loaderaddr.datastr((unsigned char *)addr,libkersize,"libfirstshared.so",strlen("libfirstshared.so"));
-        if(sub!=NULL)
-        {
-            lib_soinfo_addr = (Elf32_Addr)(sub-0x10);
-            debug_msg("sub 0x%x\n",sub);
-            break;
-        }
-    }
-    g_loaderaddr.closemaps();
+    soinfo *ttsi= (soinfo*)handle;
 
 
-
-    soinfo *ttsi= (soinfo*)lib_soinfo_addr;
-    init_msg("###################################  00\n");
+    init_msg("dlopen #########################  00\n");
     init_msg("tso base 0x%08x\n",ttsi->base);
     init_msg("tso phdr 0x%08x\n",ttsi->phdr);
     init_msg("tso strtab 0x%08x\n",ttsi->strtab);
@@ -737,32 +701,10 @@ void  start_load(void)
       init_msg("tso dynamic %x\n",elf_main.dynamic);
 
       g_loaderaddr.load_relocate(&elf_main,si);
-
-
     }
 
     g_loaderaddr.closemaps();
 
-    // void *handle = dlopen("libfirstshared.so",RTLD_NOW);
-    // if(handle==NULL){
-    //     return ;
-    // }
-    // printf("handle 0x%x\n",handle);
-
-    // soinfo *tsi= (soinfo*)handle;
-    // init_msg("###################################\n");
-    // init_msg("tso base 0x%08x\n",tsi->base);
-    // init_msg("tso phdr 0x%08x\n",tsi->phdr);
-    // init_msg("tso strtab 0x%08x\n",tsi->strtab);
-    // init_msg("tso %s\n",&tsi->strtab[0]);
-    // init_msg("tso %s\n",&tsi->strtab[1]);
-    // init_msg("tso load_bias %x\n",tsi->load_bias);
-    // init_msg("tso dynamic %x\n",tsi->dynamic);
-
-    // soinfo_addr =(Elf32_Addr)tsi; 
-    // init_msg("soinfo_addr 0x%08x \n",soinfo_addr);
-    //  start_addr = PAGE_START(soinfo_addr);
-    // init_msg("soinfo_addr 0x%08x \n",start_addr);
 
     mprotect((void*)start_addr,PAGE_SIZE,PROT_READ | PROT_WRITE);
 
