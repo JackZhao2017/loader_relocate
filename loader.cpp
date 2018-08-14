@@ -14,7 +14,7 @@
 #include <link.h>
 
 #include "printlog.h"
-
+#include "loader_addr.h"
 #include "loader_phdr.h"
 #include "loader_soinfo.h"
 #include "linker_allocator.h"
@@ -64,9 +64,14 @@ static const char* get_base_name(const char* name) {
 }
 #define SEARCH_NAME(x) get_base_name(x)
 
+static soinfo g_selfsi;
+static loader_phdr g_elfreader;
+
+
 static soinfo* soinfo_alloc(struct stat* file_stat) {
 
-  soinfo* si = g_soinfo_allocator.alloc();
+  //soinfo* si = g_soinfo_allocator.alloc();
+  soinfo* si  = &g_selfsi;
   // Initialize the new element.
   memset(si, 0, sizeof(soinfo));
   //strlcpy(si->name, name, sizeof(si->name));
@@ -469,10 +474,10 @@ static bool soinfo_link_image(soinfo* si) {
             si->rela_count = d->d_un.d_val / sizeof(ElfW(Rela));
             break;
         case DT_REL:
-            info_msg("unsupported DT_REL in \"%s\"\n", si->name);
+            init_msg("unsupported DT_REL in \"%s\"\n", si->name);
             return false;
         case DT_RELSZ:
-            info_msg("unsupported DT_RELSZ in \"%s\"\n", si->name);
+            init_msg("unsupported DT_RELSZ in \"%s\"\n", si->name);
             return false;
 #else
         case DT_REL:
@@ -550,76 +555,108 @@ static bool soinfo_link_image(soinfo* si) {
         }
     }
 
-    soinfo** needed = reinterpret_cast<soinfo**>(alloca((1 + needed_count) * sizeof(soinfo*)));
+    soinfo* neededso = reinterpret_cast<soinfo*>(malloc((1 + needed_count) * sizeof(soinfo)));
+    soinfo** needed   = reinterpret_cast<soinfo**>(malloc((1 + needed_count) * sizeof(soinfo*)));
+
     soinfo** pneeded = needed;
+    int i=0;
 
     for (ElfW(Dyn)* d = si->dynamic; d->d_tag != DT_NULL; ++d) {
         if (d->d_tag == DT_NEEDED) {
             const char* library_name = si->strtab + d->d_un.d_val;
+            loader_addr loaderaddr;
+            loaderaddr.openmaps();
 
-            void *handle = dlopen(library_name,RTLD_NOW);
-            if(handle ==NULL){
+            int libkersize =0;
+            unsigned int addr=0;
+            Elf32_Addr so_addr=0;
 
+            while((addr = loaderaddr.getParsePage(library_name,&libkersize))!=0)
+            {
+                // debug_msg("addr 0x%x  size %d \n",addr,libkersize);
+                if(addr!=NULL)
+                {
+                    so_addr=(Elf32_Addr)addr;
+                    //printf("addr 0x%x\n",addr);
+                    break;
+                }                    
             }
-            soinfo *tsi= (soinfo*)handle;
-            init_msg("needs %s base 0x%08x\n",library_name,tsi->base);
-            *pneeded++ = tsi;
-            dlclose(handle); 
+            if(so_addr){
+
+              needed[i]=&neededso[i];
+              ++i;
+              loaderaddr.load_needed_soinfo(*pneeded,(unsigned char *)so_addr,libkersize);
+              memcpy((*pneeded)->name,library_name,strlen(library_name)); 
+              init_msg("needs %s soinfo addr 0x%08x\n",library_name,addr);
+              *pneeded++ ;
+            }else{
+              init_msg("not found needs %s soinfo addr 0x%08x\n",library_name,addr);
+            }
+            loaderaddr.closemaps();         
         }
     }
-    *pneeded = NULL;
+    
+    pneeded = NULL;
     
 #if defined(USE_RELA)
     if (si->plt_rela != NULL) {
-        info_msg("[ relocating %s plt ]\n", si->name);
+         // debug_msg("[ relocating %s plta ]\n", si->name);
         if (soinfo_relocate(si, si->plt_rela, si->plt_rela_count, needed)) {
             return false;
         }
     }
     if (si->rela != NULL) {
-        info_msg("[ relocating %s ]\n", si->name);
+         // debug_msg("[ relocating %s a]\n", si->name);
         if (soinfo_relocate(si, si->rela, si->rela_count, needed)) {
             return false;
         }
     }
 #else
     if (si->plt_rel != NULL) {
-        info_msg("[ relocating %s plt]\n", si->name);
+         // debug_msg("[ relocating %s plt]\n", si->name);
         if (soinfo_relocate(si, si->plt_rel, si->plt_rel_count, needed)) {
             return false;
         }
     }
     if (si->rel != NULL) {
-        info_msg("[ relocating %s ]\n", si->name);
+         // debug_msg("[ relocating %s ]\n", si->name);
         if (soinfo_relocate(si, si->rel, si->rel_count, needed)) {
             return false;
         }
     }
 #endif   
-  
+    debug_msg("[  %s finished ]\n", __func__);
     return true;
 }
 
 
- void  start_load(void)
+static loader_addr g_loaderaddr;
+
+void  start_load(void)
 {
     int fd=open("libso/libfirstshared.so",O_RDONLY);
     if(fd<0){
        err_msg("open libfirstshared.so faild\n");
     }
-    loader_phdr elfreader(fd);
-    elfreader.load();
+    
+    g_elfreader.load(fd);
     struct stat file_stat;
     fstat(fd, &file_stat);
 
-    soinfo* si = soinfo_alloc("libfirstshared.so", &file_stat);
+    
+    
 
 
-    si->base = elfreader.load_start();
-    si->size = elfreader.load_size();
-    si->load_bias = elfreader.load_bias();
-    si->phnum = elfreader.phdr_count();
-    si->phdr = elfreader.loaded_phdr();
+    soinfo* si = soinfo_alloc(&file_stat);
+    if(si==NULL){
+       err_msg("soinfo_alloc faild\n");
+    }
+
+    si->base = g_elfreader.load_start();
+    si->size = g_elfreader.load_size();
+    si->load_bias = g_elfreader.load_bias();
+    si->phnum = g_elfreader.phdr_count();
+    si->phdr = g_elfreader.loaded_phdr();
 
     init_msg("[ load_library base=%p size=%zu name='%s' ]\n",
             reinterpret_cast<void*>(si->base), si->size, si->name);
@@ -630,13 +667,137 @@ static bool soinfo_link_image(soinfo* si) {
     }
     close(fd);
 
-    void *handle = dlopen("libloader.so",RTLD_NOW);
-    if(handle==NULL){
-        return ;
+    init_msg("sizeof soinfo %d \n",sizeof(soinfo));
+    init_msg("so base 0x%08x\n",si->base);
+    init_msg("so phdr 0x%08x\n",si->phdr);
+    init_msg("so strtab 0x%08x\n",si->strtab);
+    init_msg("so %s\n",&si->strtab[0]);
+    init_msg("so %s\n",&si->strtab[1]);
+    init_msg("so load_bias %x\n",si->load_bias);
+    init_msg("so dynamic %x\n",si->dynamic);
+
+    debug_msg("soinfo size %d \n",sizeof(soinfo));
+    debug_msg("0x%x 0x%x\n",si,&si->name);
+
+
+    int libkersize =0;
+    unsigned int addr=0;
+    Elf32_Addr lib_soinfo_addr=0;
+
+    g_loaderaddr.openmaps();
+
+    while((addr = g_loaderaddr.getParsePage(NULL,&libkersize))!=0)
+    {
+        debug_msg("addr 0x%x  size %d \n",addr,libkersize);
+        unsigned char * sub =g_loaderaddr.datastr((unsigned char *)addr,libkersize,"libfirstshared.so",strlen("libfirstshared.so"));
+        if(sub!=NULL)
+        {
+            lib_soinfo_addr = (Elf32_Addr)(sub-0x10);
+            debug_msg("sub 0x%x\n",sub);
+            break;
+        }
     }
-    soinfo *tsi= (soinfo*)handle;
-    init_msg("base 0x%08x\n",tsi->base);
-    dlclose(handle);     
+    g_loaderaddr.closemaps();
+
+
+
+    soinfo *ttsi= (soinfo*)lib_soinfo_addr;
+    init_msg("###################################  00\n");
+    init_msg("tso base 0x%08x\n",ttsi->base);
+    init_msg("tso phdr 0x%08x\n",ttsi->phdr);
+    init_msg("tso strtab 0x%08x\n",ttsi->strtab);
+    init_msg("tso %s\n",&ttsi->strtab[0]);
+    init_msg("tso %s\n",&ttsi->strtab[1]);
+    init_msg("tso load_bias %x\n",ttsi->load_bias);
+    init_msg("tso dynamic %x\n",ttsi->dynamic);
+
+    Elf32_Addr soinfo_addr =(Elf32_Addr)ttsi; 
+    init_msg("soinfo_addr 0x%08x \n",soinfo_addr);
+    Elf32_Addr start_addr = PAGE_START(soinfo_addr);
+    init_msg("soinfo_addr 0x%08x \n",start_addr);
+
+
+
+    g_loaderaddr.openmaps();
+
+    soinfo elf_main;
+    memset(&elf_main,0,sizeof(soinfo));
+    if((addr = g_loaderaddr.getParsePage("demo.out",&libkersize))!=0){
+
+      g_loaderaddr.load_needed_soinfo(&elf_main,(unsigned char *)addr,libkersize);
+
+
+      init_msg("###################################  demo\n");
+      init_msg("tso base 0x%08x\n",elf_main.base);
+      init_msg("tso phdr 0x%08x\n",elf_main.phdr);
+      init_msg("tso strtab 0x%08x\n",elf_main.strtab);
+      init_msg("tso %s\n",&elf_main.strtab[0]);
+      init_msg("tso %s\n",&elf_main.strtab[1]);
+      init_msg("tso load_bias %x\n",elf_main.load_bias);
+      init_msg("tso dynamic %x\n",elf_main.dynamic);
+
+      g_loaderaddr.load_relocate(&elf_main,si);
+
+
+    }
+
+    g_loaderaddr.closemaps();
+
+    // void *handle = dlopen("libfirstshared.so",RTLD_NOW);
+    // if(handle==NULL){
+    //     return ;
+    // }
+    // printf("handle 0x%x\n",handle);
+
+    // soinfo *tsi= (soinfo*)handle;
+    // init_msg("###################################\n");
+    // init_msg("tso base 0x%08x\n",tsi->base);
+    // init_msg("tso phdr 0x%08x\n",tsi->phdr);
+    // init_msg("tso strtab 0x%08x\n",tsi->strtab);
+    // init_msg("tso %s\n",&tsi->strtab[0]);
+    // init_msg("tso %s\n",&tsi->strtab[1]);
+    // init_msg("tso load_bias %x\n",tsi->load_bias);
+    // init_msg("tso dynamic %x\n",tsi->dynamic);
+
+    // soinfo_addr =(Elf32_Addr)tsi; 
+    // init_msg("soinfo_addr 0x%08x \n",soinfo_addr);
+    //  start_addr = PAGE_START(soinfo_addr);
+    // init_msg("soinfo_addr 0x%08x \n",start_addr);
+
+    mprotect((void*)start_addr,PAGE_SIZE,PROT_READ | PROT_WRITE);
+
+    ttsi->ARM_exidx =si->ARM_exidx;
+    ttsi->ARM_exidx_count =si->ARM_exidx_count;
+    ttsi->base = si->base ;
+    ttsi->size   = si->size;
+    ttsi->load_bias =si->load_bias;
+    ttsi->phnum = si->phnum;
+    ttsi->phdr = si->phdr;
+    ttsi->strtab = si->strtab;
+    ttsi->symtab = si->symtab ;
+    ttsi->dynamic = si->dynamic;
+    ttsi->nbucket =si->nbucket;
+    ttsi->nchain =si->nchain ;
+    ttsi->bucket =si->bucket;
+    ttsi->chain =si->chain; 
+    ttsi->plt_rel=si->plt_rel;
+    ttsi->plt_rel_count=si->plt_rel_count;
+    ttsi->rel = si->rel;
+    ttsi->rel_count  = si->rel_count ; 
+
+    mprotect((void*)start_addr,PAGE_SIZE,PROT_READ );
+
+    // init_msg("###################################\n");
+    // init_msg("tso base 0x%08x\n",tsi->base);
+    // init_msg("tso phdr 0x%08x\n",tsi->phdr);
+    // init_msg("tso strtab 0x%08x\n",tsi->strtab);
+    // init_msg("tso %s\n",&tsi->strtab[0]);
+    // init_msg("tso %s\n",&tsi->strtab[1]);
+    // init_msg("tso load_bias %x\n",tsi->load_bias);
+    // init_msg("tso dynamic %x\n",tsi->dynamic);
+    // void*symaddr=dlsym(handle,"symbol_test"); 
+    // init_msg("symaddr  0x%08x\n",symaddr); 
+      
     return ;
 }
 
@@ -650,7 +811,17 @@ void print_start(void)
 }
 extern "C" void _init(void)
 {
-     init_msg("%s\n",__func__ );
+     init_msg("%s\n",__func__);
      start_load();
 }
 
+int g_val=1;
+
+extern "C" void mysection_func(void)
+{
+  printf("%s g_val %d \n",__func__,g_val );
+}
+extern "C" void mysection2_func(void)
+{
+  printf("%s g_val %d \n",__func__,g_val );
+}

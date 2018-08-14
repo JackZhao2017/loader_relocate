@@ -111,8 +111,8 @@ void soinfo::add_child(soinfo* child) {
     return;
   }
 
-  this->children.push_front(child);
-  child->parents.push_front(this);
+  // this->children.push_front(child);
+  // child->parents.push_front(this);
 }
 
 void soinfo::remove_all_links() {
@@ -120,7 +120,7 @@ void soinfo::remove_all_links() {
     return;
   }
 
-  // // 1. Untie connected soinfos from 'this'.
+  // 1. Untie connected soinfos from 'this'.
   // children.for_each([&] (soinfo* child) {
   //   child->parents.remove_if([&] (const soinfo* parent) {
   //     return parent == this;
@@ -133,9 +133,9 @@ void soinfo::remove_all_links() {
   //   });
   // });
 
-  // 2. Once everything untied - clear local lists.
-  parents.clear();
-  children.clear();
+  //2. Once everything untied - clear local lists.
+  // parents.clear();
+  // children.clear();
 }
 
 void soinfo::set_st_dev(dev_t dev) {
@@ -172,15 +172,15 @@ ino_t soinfo::get_st_ino() {
 
 // This is a return on get_children() in case
 // 'this->flags' does not have FLAG_NEW_SOINFO set.
-static soinfo::soinfo_list_t g_empty_list;
+// static soinfo::soinfo_list_t g_empty_list;
 
-soinfo::soinfo_list_t& soinfo::get_children() {
-  if ((this->flags & FLAG_NEW_SOINFO) == 0) {
-    return g_empty_list;
-  }
+// soinfo::soinfo_list_t& soinfo::get_children() {
+//   if ((this->flags & FLAG_NEW_SOINFO) == 0) {
+//     return g_empty_list;
+//   }
 
-  return this->children;
-}
+//   return this->children;
+// }
 
 
 

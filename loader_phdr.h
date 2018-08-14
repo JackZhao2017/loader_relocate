@@ -9,10 +9,27 @@ extern "C" {
 #include <link.h>
 
 
+#define PAGE_SIZE  4096
+#define PAGE_MASK  (~(PAGE_SIZE-1))
+
+// Returns the address of the page containing address 'x'.
+#define PAGE_START(x)  ((x) & PAGE_MASK)
+
+// Returns the offset of address 'x' in its page.
+#define PAGE_OFFSET(x) ((x) & ~PAGE_MASK)
+
+// Returns the address of the next page after address 'x', unless 'x' is
+// itself at the start of a page.
+#define PAGE_END(x)    PAGE_START((x) + (PAGE_SIZE-1))
+#define MAYBE_MAP_FLAG(x, from, to)  (((x) & (from)) ? (to) : 0)
+#define PFLAGS_TO_PROT(x)            (MAYBE_MAP_FLAG((x), PF_X, PROT_EXEC) | \
+                                      MAYBE_MAP_FLAG((x), PF_R, PROT_READ) | \
+                                      MAYBE_MAP_FLAG((x), PF_W, PROT_WRITE))
+
 class loader_phdr
 {
 public:
-	loader_phdr(int fd);
+	loader_phdr();
 	~loader_phdr();
 
   	size_t phdr_count() { return phdr_num_; }
@@ -21,7 +38,7 @@ public:
   	Elf32_Addr load_bias() { return load_bias_; }
   	const Elf32_Phdr* loaded_phdr() { return loaded_phdr_; }
 
-	bool load();
+	bool load(int fd);
 private:
 	bool ReadElfHeader();
 	bool VerifyElfHeader();

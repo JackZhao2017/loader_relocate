@@ -30,11 +30,11 @@
                                       MAYBE_MAP_FLAG((x), PF_R, PROT_READ) | \
                                       MAYBE_MAP_FLAG((x), PF_W, PROT_WRITE))
 
-loader_phdr::loader_phdr(int fd)
+loader_phdr::loader_phdr()
 {
 	memset(&elf_header,0,sizeof(Elf32_Ehdr));
 	phdr_num_=0;
-	mfd=fd;
+	mfd=-1;
   mbase =0;
 }
 
@@ -80,7 +80,7 @@ bool loader_phdr::ReadProgramHeader()
 	}
   phdr_mmap_ = mmap_result;
  	phdr_table_ = reinterpret_cast<Elf32_Phdr*>(reinterpret_cast<char*>(mmap_result) + page_offset);
-	info_msg("mmap_result 0x%08x   phdr_table_  0x%08x\n",mmap_result,(void *)phdr_table_);
+	init_msg("mmap_result 0x%08x   phdr_table_  0x%08x\n",mmap_result,(void *)phdr_table_);
 	return true;
 }
 static size_t phdr_table_get_load_size(const Elf32_Phdr* phdr_table, size_t phdr_count,
@@ -274,8 +274,9 @@ bool loader_phdr::CheckPhdr(Elf32_Addr loaded) {
   return false;
 }
 
-bool loader_phdr::load()
+bool loader_phdr::load(int fd)
 {
+  mfd = fd;
 	return ReadElfHeader()&&VerifyElfHeader()&&ReadProgramHeader()&&ReserveAddressSpace()&&loadSegments()&&FindPhdr(); 
 }
 

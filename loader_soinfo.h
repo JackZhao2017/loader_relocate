@@ -11,7 +11,7 @@
 #include <sys/stat.h>
 #include <inttypes.h>
 
-#include "loader_list.h"
+// #include "loader_list.h"
 #include "private/libc_logging.h"
 #include "private/bionic_macros.h"
 
@@ -29,19 +29,19 @@ typedef void (*linker_function_t)();
 
 struct soinfo;
 
-class SoinfoListAllocator {
-public:
-  static LoaderListEntry<soinfo>* alloc();
-  static void free(LoaderListEntry<soinfo>* entry);
-private:
-  // unconstructable
-  DISALLOW_IMPLICIT_CONSTRUCTORS(SoinfoListAllocator);
-};
+// class SoinfoListAllocator {
+// public:
+//   static LoaderListEntry<soinfo>* alloc();
+//   static void free(LoaderListEntry<soinfo>* entry);
+// private:
+//   // unconstructable
+//   DISALLOW_IMPLICIT_CONSTRUCTORS(SoinfoListAllocator);
+// };
 
 
 struct soinfo {
  public:
-  typedef LoaderList<soinfo, SoinfoListAllocator> soinfo_list_t;
+  // typedef LoaderList<soinfo, SoinfoListAllocator> soinfo_list_t;
  public:
   char name[SOINFO_NAME_LEN];
   const ElfW(Phdr)* phdr;
@@ -50,16 +50,16 @@ struct soinfo {
   ElfW(Addr) base;
   size_t size;
 
-#ifndef __LP64__
+// #ifndef __LP64__
   uint32_t unused1;  // DO NOT USE, maintained for compatibility.
-#endif
+// #endif
 
   ElfW(Dyn)* dynamic;
 
-#ifndef __LP64__
+// #ifndef __LP64__
   uint32_t unused2; // DO NOT USE, maintained for compatibility
   uint32_t unused3; // DO NOT USE, maintained for compatibility
-#endif
+// #endif
 
   soinfo* next;
   unsigned flags;
@@ -72,25 +72,22 @@ struct soinfo {
   unsigned* bucket;
   unsigned* chain;
 
-#if defined(__mips__) || !defined(__LP64__)
-  // This is only used by mips and mips64, but needs to be here for
-  // all 32-bit architectures to preserve binary compatibility.
-  ElfW(Addr)** plt_got;
-#endif
+  unsigned* plt_got;
 
-#if defined(USE_RELA)
-  ElfW(Rela)* plt_rela;
-  size_t plt_rela_count;
+// #if defined(__mips__) || !defined(__LP64__)
+//   // This is only used by mips and mips64, but needs to be here for
+//   // all 32-bit architectures to preserve binary compatibility.
+//   ElfW(Addr)** plt_got;
+// #endif
 
-  ElfW(Rela)* rela;
-  size_t rela_count;
-#else
+
+
   ElfW(Rel)* plt_rel;
   size_t plt_rel_count;
 
   ElfW(Rel)* rel;
   size_t rel_count;
-#endif
+
 
   linker_function_t* preinit_array;
   size_t preinit_array_count;
@@ -138,7 +135,7 @@ struct soinfo {
   ino_t get_st_ino();
   dev_t get_st_dev();
 
-  soinfo_list_t& get_children();
+  // soinfo_list_t& get_children();
 
  private:
   void CallArray(const char* array_name, linker_function_t* functions, size_t count, bool reverse);
@@ -153,8 +150,8 @@ struct soinfo {
   ino_t st_ino;
 
   // dependency graph
-  soinfo_list_t children;
-  soinfo_list_t parents;
+  // soinfo_list_t children;
+  // soinfo_list_t parents;
 
 };
 // #ifdef __cplusplus
