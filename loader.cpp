@@ -64,14 +64,14 @@ static const char* get_base_name(const char* name) {
 }
 #define SEARCH_NAME(x) get_base_name(x)
 
-static soinfo g_selfsi;
+static soinfo g_realsi;
 static loader_phdr g_elfreader;
 
 
 static soinfo* soinfo_alloc(struct stat* file_stat) {
 
   //soinfo* si = g_soinfo_allocator.alloc();
-  soinfo* si  = &g_selfsi;
+  soinfo* si  = &g_realsi;
   // Initialize the new element.
   memset(si, 0, sizeof(soinfo));
   //strlcpy(si->name, name, sizeof(si->name));
@@ -614,20 +614,45 @@ static loader_addr g_loaderaddr;
 
 void  start_load(void)
 {
-    int fd=open("libso/libfirstshared.so",O_RDONLY);
-    if(fd<0){
-       err_msg("open libfirstshared.so faild\n");
-    }
-    
-    g_elfreader.load(fd);
-    struct stat file_stat;
-    fstat(fd, &file_stat);
 
-    
-  
-    soinfo* si = soinfo_alloc(&file_stat);
+    Elf32_Addr  keyaddr=0;
+    Elf32_Addr  Soaddr = 0;
+    Elf32_Ehdr  Self_elfHeader;
+    Elf32_Ehdr  real_elfHeader;
+  //open combine so (loader.so and origin so included);
+    void *handle =dlopen("libfirstshared.so",RTLD_NOW);
+
+    soinfo *selfsi= (soinfo*)handle;
+
+    init_msg("dlopen #########################  00\n");
+    init_msg("tso base 0x%08x\n",selfsi->base);
+    init_msg("tso phdr 0x%08x\n",selfsi->phdr);
+    init_msg("tso strtab 0x%08x\n",selfsi->strtab);
+    init_msg("tso %s\n",&selfsi->strtab[0]);
+    init_msg("tso %s\n",&selfsi->strtab[1]);
+    init_msg("tso load_bias %x\n",selfsi->load_bias);
+    init_msg("tso dynamic %x\n",selfsi->dynamic);
+
+    Elf32_Addr soinfo_addr =(Elf32_Addr)selfsi; 
+    init_msg("soinfo_addr 0x%08x \n",soinfo_addr);
+    Elf32_Addr start_addr = PAGE_START(soinfo_addr);
+    init_msg("soinfo_addr 0x%08x \n",start_addr);
+
+    //find offset of origin so in combine so. 
+    g_loaderaddr.load_needed_elfhead((unsigned char *)selfsi->base,&Self_elfHeader);
+    keyaddr = Self_elfHeader.e_shoff+selfsi->base;
+    Soaddr  = keyaddr+64;
+    init_msg("keyaddr 0x%08x \n",keyaddr);
+    init_msg("Soaddr 0x%08x \n",Soaddr);
+
+    memcpy(&real_elfHeader,(void *)Soaddr,sizeof(Elf32_Ehdr));
+    init_msg("real_elfHeader  e_ident 0x%02x \n",real_elfHeader.e_ident[0]);
+
+    //load map 
+    g_elfreader.load(Soaddr);
+    soinfo* si = soinfo_alloc(NULL);
     if(si==NULL){
-       err_msg("soinfo_alloc faild\n");
+        err_msg("soinfo_alloc faild\n");
     }
 
     si->base = g_elfreader.load_start();
@@ -640,73 +665,32 @@ void  start_load(void)
             reinterpret_cast<void*>(si->base), si->size, si->name);
     soinfo_link_image(si);
 
-    if (si != NULL) {
+    if(si != NULL) {
       si->CallConstructors();
     }
-    close(fd);
+    // mprotect((void*)start_addr,PAGE_SIZE,PROT_READ | PROT_WRITE);
 
-    init_msg("sizeof soinfo %d \n",sizeof(soinfo));
-    init_msg("so base 0x%08x\n",si->base);
-    init_msg("so phdr 0x%08x\n",si->phdr);
-    init_msg("so strtab 0x%08x\n",si->strtab);
-    init_msg("so %s\n",&si->strtab[0]);
-    init_msg("so %s\n",&si->strtab[1]);
-    init_msg("so load_bias %x\n",si->load_bias);
-    init_msg("so dynamic %x\n",si->dynamic);
-
-    debug_msg("soinfo size %d \n",sizeof(soinfo));
-    debug_msg("0x%x 0x%x\n",si,&si->name);
-
-
-    int libkersize =0;
+    // ttsi->ARM_exidx =si->ARM_exidx;
+    // ttsi->ARM_exidx_count =si->ARM_exidx_count;
+    // ttsi->base = si->base ;
+    // ttsi->size   = si->size;
+    // ttsi->load_bias =si->load_bias;
+    // ttsi->phnum = si->phnum;
+    // ttsi->phdr = si->phdr;
+    // ttsi->strtab = si->strtab;
+    // ttsi->symtab = si->symtab ;
+    // ttsi->dynamic = si->dynamic;
+    // ttsi->nbucket =si->nbucket;
+    // ttsi->nchain =si->nchain ;
+    // ttsi->bucket =si->bucket;
+    // ttsi->chain =si->chain; 
+    // ttsi->plt_rel=si->plt_rel;
+    // ttsi->plt_rel_count=si->plt_rel_count;
+    // ttsi->rel = si->rel;
+    // ttsi->rel_count  = si->rel_count ; 
+    // mprotect((void*)start_addr,PAGE_SIZE,PROT_READ);
     unsigned int addr=0;
-    Elf32_Addr lib_soinfo_addr=0;
-
-    void *handle =dlopen("libfirstshared.so",RTLD_NOW);
-
-    soinfo *ttsi= (soinfo*)handle;
-
-
-    init_msg("dlopen #########################  00\n");
-    init_msg("tso base 0x%08x\n",ttsi->base);
-    init_msg("tso phdr 0x%08x\n",ttsi->phdr);
-    init_msg("tso strtab 0x%08x\n",ttsi->strtab);
-    init_msg("tso %s\n",&ttsi->strtab[0]);
-    init_msg("tso %s\n",&ttsi->strtab[1]);
-    init_msg("tso load_bias %x\n",ttsi->load_bias);
-    init_msg("tso dynamic %x\n",ttsi->dynamic);
-
-    Elf32_Addr soinfo_addr =(Elf32_Addr)ttsi; 
-    init_msg("soinfo_addr 0x%08x \n",soinfo_addr);
-    Elf32_Addr start_addr = PAGE_START(soinfo_addr);
-    init_msg("soinfo_addr 0x%08x \n",start_addr);
-
-
-    mprotect((void*)start_addr,PAGE_SIZE,PROT_READ | PROT_WRITE);
-
-    ttsi->ARM_exidx =si->ARM_exidx;
-    ttsi->ARM_exidx_count =si->ARM_exidx_count;
-    ttsi->base = si->base ;
-    ttsi->size   = si->size;
-    ttsi->load_bias =si->load_bias;
-    ttsi->phnum = si->phnum;
-    ttsi->phdr = si->phdr;
-    ttsi->strtab = si->strtab;
-    ttsi->symtab = si->symtab ;
-    ttsi->dynamic = si->dynamic;
-    ttsi->nbucket =si->nbucket;
-    ttsi->nchain =si->nchain ;
-    ttsi->bucket =si->bucket;
-    ttsi->chain =si->chain; 
-    ttsi->plt_rel=si->plt_rel;
-    ttsi->plt_rel_count=si->plt_rel_count;
-    ttsi->rel = si->rel;
-    ttsi->rel_count  = si->rel_count ; 
-
-    mprotect((void*)start_addr,PAGE_SIZE,PROT_READ);
-
-
-
+    int libkersize =0;
     g_loaderaddr.openmaps();
     soinfo *elf_main,elfmain;
     elf_main=&elfmain;
@@ -715,8 +699,7 @@ void  start_load(void)
     if((addr = g_loaderaddr.getParsePage("demo.out",&libkersize))!=0){
 
       g_loaderaddr.load_needed_soinfo(elf_main,(unsigned char *)addr,libkersize);
-
-
+      
       init_msg("###################################  demo\n");
       init_msg("tso base 0x%08x\n",elf_main->base);
       init_msg("tso phdr 0x%08x\n",elf_main->phdr);
@@ -727,23 +710,10 @@ void  start_load(void)
       init_msg("tso dynamic %x\n",elf_main->dynamic);
 
       g_loaderaddr.load_relocate(elf_main,si);
+    
     }
-
     g_loaderaddr.closemaps();
 
-
-
-
-    // init_msg("###################################\n");
-    // init_msg("tso base 0x%08x\n",tsi->base);
-    // init_msg("tso phdr 0x%08x\n",tsi->phdr);
-    // init_msg("tso strtab 0x%08x\n",tsi->strtab);
-    // init_msg("tso %s\n",&tsi->strtab[0]);
-    // init_msg("tso %s\n",&tsi->strtab[1]);
-    // init_msg("tso load_bias %x\n",tsi->load_bias);
-    // init_msg("tso dynamic %x\n",tsi->dynamic);
-    // void*symaddr=dlsym(handle,"symbol_test"); 
-    // init_msg("symaddr  0x%08x\n",symaddr); 
       
     return ;
 }

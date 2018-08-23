@@ -175,10 +175,10 @@ unsigned char *  loader_addr::datastr(unsigned char *data,int size, const char *
     return ret_addr;
 }
 
-void loader_addr::load_needed_elfhead(unsigned char *data)
+void loader_addr::load_needed_elfhead(unsigned char *data,Elf32_Ehdr *elf_header)
 {
-    memcpy(&mElf_Header,data,sizeof(Elf32_Ehdr));
-    debug_msg("phdr offset 0x%x \n",mElf_Header.e_phoff);
+    memcpy(elf_header,data,sizeof(Elf32_Ehdr));
+    debug_msg("phdr offset 0x%x \n",elf_header->e_phoff);
 
 }
 
@@ -189,9 +189,8 @@ void loader_addr::load_needed_phdr(unsigned char *data,int size)
       return;
     }
     
-    load_needed_elfhead(data);
+    load_needed_elfhead(data,&mElf_Header);
     mPhdr_num = mElf_Header.e_phnum;
-
     phdr_table_ = reinterpret_cast<Elf32_Phdr*>(reinterpret_cast<unsigned char*>(data) +mElf_Header.e_phoff);
 
 }
@@ -563,25 +562,19 @@ int  loader_addr::load_relocate(soinfo* si,soinfo *needed)
     mprotect((void*)start_addr,PAGE_SIZE*page_size,PROT_READ | PROT_WRITE);
 
     if (si->plt_rel != NULL) {
-
-        // debug_msg("[ relocating %s plt]\n", si->name);
-        
+        // debug_msg("[ relocating %s plt]\n", si->name);       
         if (relocate_soinfo(si, si->plt_rel, si->plt_rel_count, needed)) {
             goto err;
         }
     }
-
     if (si->rel != NULL) {
-
         // debug_msg("[ relocating %s ]\n", si->name);
-
         if (relocate_soinfo(si, si->rel, si->rel_count, needed)) {
             goto err;
         }
     }
-
+    
     mprotect((void*)start_addr,PAGE_SIZE*page_size,PROT_READ );
-
     return true;
 err:
     mprotect((void*)start_addr,PAGE_SIZE*page_size,PROT_READ );

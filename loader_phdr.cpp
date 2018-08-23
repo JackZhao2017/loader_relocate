@@ -45,8 +45,8 @@ loader_phdr::~loader_phdr()
 
 bool loader_phdr::ReadElfHeader()
 {
-	read(mfd,&elf_header,sizeof(Elf32_Ehdr));
-	//memcpy(&elf_header,base,sizeof(Elf32_Ehdr));
+	//read(mfd,&elf_header,sizeof(Elf32_Ehdr));
+	memcpy((void *)&elf_header,(void *)mbase,sizeof(Elf32_Ehdr));
 	return true;
 }
 
@@ -73,13 +73,20 @@ bool loader_phdr::ReadProgramHeader()
 	Elf32_Addr page_offset = PAGE_OFFSET(elf_header.e_phoff);
 	phdr_size_ = page_max - page_min;
 
-	void* mmap_result = mmap(NULL, phdr_size_, PROT_READ, MAP_PRIVATE, mfd, page_min);
+  int mmap_flags = MAP_PRIVATE | MAP_ANONYMOUS;
+  void* mmap_result = mmap(NULL, phdr_size_, PROT_READ|PROT_WRITE, mmap_flags, -1, page_min);
+	//void* mmap_result = mmap(NULL, phdr_size_, PROT_READ, MAP_PRIVATE, mfd, page_min);
 	if (mmap_result == MAP_FAILED) {
 		err_msg("phdr mmap failed: %s\n", strerror(errno));
 		return false;
 	}
+  init_msg("start memcpy phdr_size_ %d \n",phdr_size_);
+
+  memcpy((void *)mmap_result,(void *)mbase,phdr_size_);
+
   phdr_mmap_ = mmap_result;
  	phdr_table_ = reinterpret_cast<Elf32_Phdr*>(reinterpret_cast<char*>(mmap_result) + page_offset);
+
 	init_msg("mmap_result 0x%08x   phdr_table_  0x%08x\n",mmap_result,(void *)phdr_table_);
 	return true;
 }
@@ -172,28 +179,30 @@ bool loader_phdr::loadSegments()
     Elf32_Addr file_page_start = PAGE_START(file_start);
     Elf32_Addr file_length = file_end - file_page_start;
 
-    info_msg(" seg_start  	0x%08x \n",seg_start);
-    info_msg(" seg_end  		0x%08x \n", seg_end);
-	  info_msg(" seg_page_start 0x%08x  \n", seg_page_start);
-	  info_msg(" seg_page_end 	0x%08x  \n",seg_page_end);
-	  info_msg(" seg_file_end 	0x%08x \n",seg_file_end);
-    info_msg(" file_start 	0x%08x  \n",file_start);
-    info_msg(" file_end 		0x%08x   \n",file_end );
-    info_msg(" file_page_start 0x%08x   \n",file_page_start );
-    info_msg(" file_length 	0x%08x \n",file_length );
+    init_msg(" seg_start  	0x%08x \n",seg_start);
+    init_msg(" seg_end  0x%08x \n",seg_end);
+	  init_msg(" seg_page_start 0x%08x  \n",seg_page_start);
+	  init_msg(" seg_page_end 0x%08x  \n",seg_page_end);
+	  init_msg(" seg_file_end 0x%08x \n",seg_file_end);
+    init_msg(" file_start 	0x%08x  \n",file_start);
+    init_msg(" file_end 		0x%08x   \n",file_end );
+    init_msg(" file_page_start 0x%08x   \n",file_page_start );
+    init_msg(" file_length 	0x%08x \n",file_length );
 
     if (file_length != 0) {
+      int mmap_flags = MAP_FIXED|MAP_PRIVATE|MAP_ANONYMOUS;
       void* seg_addr = mmap(reinterpret_cast<void*>(seg_page_start),
                             file_length,
-                            PFLAGS_TO_PROT(phdr->p_flags),
-                            MAP_FIXED|MAP_PRIVATE,
-                            mfd,
+                            PROT_READ|PROT_WRITE|PROT_EXEC,//PFLAGS_TO_PROT(phdr->p_flags),
+                            mmap_flags ,//MAP_FIXED|MAP_PRIVATE,
+                            -1,//mfd,
                             file_page_start);
-      init_msg(" %d seg_addr  0x%08x  len %d \n",i,seg_addr,file_length);
+      init_msg(" %d seg_addr  0x%08x  len 0x%08x \n",i,seg_addr,file_length);
       if (seg_addr == MAP_FAILED) {
-        err_msg("couldn't map segment %zd: %s", i, strerror(errno));
+        err_msg("couldn't map segment %zd: %s\n", i, strerror(errno));
         return false;
       }
+      memcpy(reinterpret_cast<void*>(seg_page_start),reinterpret_cast<void*>(mbase+file_page_start),file_length);
     }
 
     // if the segment is writable, and does not end on a page boundary,
@@ -209,6 +218,7 @@ bool loader_phdr::loadSegments()
     // between them. This is done by using a private anonymous
     // map for all extra pages.
     if (seg_page_end > seg_file_end) {
+        init_msg("zeromap start\n");
 	      void* zeromap = mmap(reinterpret_cast<void*>(seg_file_end),
 	                           seg_page_end - seg_file_end,
 	                           PFLAGS_TO_PROT(phdr->p_flags),
@@ -274,9 +284,9 @@ bool loader_phdr::CheckPhdr(Elf32_Addr loaded) {
   return false;
 }
 
-bool loader_phdr::load(int fd)
+bool loader_phdr::load(Elf32_Addr base)
 {
-  mfd = fd;
+  mbase = base;
 	return ReadElfHeader()&&VerifyElfHeader()&&ReadProgramHeader()&&ReserveAddressSpace()&&loadSegments()&&FindPhdr(); 
 }
 

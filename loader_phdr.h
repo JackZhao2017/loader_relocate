@@ -38,7 +38,7 @@ public:
   	Elf32_Addr load_bias() { return load_bias_; }
   	const Elf32_Phdr* loaded_phdr() { return loaded_phdr_; }
 
-	bool load(int fd);
+	bool load(Elf32_Addr base);
 private:
 	bool ReadElfHeader();
 	bool VerifyElfHeader();

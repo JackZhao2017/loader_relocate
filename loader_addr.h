@@ -23,7 +23,7 @@ public:
 
     void  load_needed_phdr(unsigned char *data,int size);
 
-    void load_needed_elfhead(unsigned char *data);
+    void load_needed_elfhead(unsigned char *data,Elf32_Ehdr *elf_header);
 	int  load_needed_so_imag(soinfo* si);
 
 	void load_needed_soinfo(soinfo* si ,unsigned char *data,int size);
@@ -31,13 +31,11 @@ public:
                                     ElfW(Addr) load_bias,
                                     ElfW(Dyn)** dynamic, size_t* dynamic_count, ElfW(Word)* dynamic_flags);
 
-
-
-
 	ElfW(Addr) relocate_infopage(soinfo* si, ElfW(Rel)* rel ,unsigned count);
 	int relocate_soinfo(soinfo* si, ElfW(Rel)* rel, unsigned count, soinfo* needed);
 	ElfW(Sym)* lookup_soinfo(const char* name,soinfo* needed);
 	int  load_relocate(soinfo* si,soinfo *needed);
+
 private:
 	FILE *mfp;
 	int mPid;
