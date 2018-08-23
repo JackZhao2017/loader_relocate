@@ -5,9 +5,9 @@ LOCAL_PATH := $(root_path)
 include $(CLEAR_VARS)
 
 
-LOCAL_MODULE :=firstshared.so
+LOCAL_MODULE :=loader.so
 
-LOCAL_MODULE_FILENAME:=libfirstshared
+LOCAL_MODULE_FILENAME:=libloader
 
 LOCAL_C_INCLUDES:=$(LOCAL_PATH)/
 
