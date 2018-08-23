@@ -11,17 +11,6 @@
 #include "loader_addr.h"
 #include "loader_soinfo.h"
 
-//const char linkername[]="addr.out";
-
-// typedef struct 
-// {
-//       unsigned int startaddr;
-//       unsigned int endaddr;
-//       unsigned int prop;
-//       unsigned int offset;
-
-
-// };
 #if defined(__LP64__)
 #define ELFW(what) ELF64_ ## what
 #else
@@ -373,7 +362,7 @@ void loader_addr::load_needed_soinfo(soinfo* si ,unsigned char *data,int size)
 }
 ElfW(Sym)* loader_addr::lookup_soinfo(const char* name,soinfo* needed)
 {     
-     for(int i=0;i<3;i++)
+     for(int i=0;*func_name[i]!=NULL;i++)
      {
           if(strcmp(func_name[i],name)==0)
           {
@@ -569,13 +558,13 @@ int  loader_addr::load_relocate(soinfo* si,soinfo *needed)
 
     int page_size = (relocate_maxaddr - relocate_minaddr)/PAGE_SIZE+1;
 
-    debug_msg("%s start addr %x relocate_minaddr %x  relocate_maxaddr %x page_size %d \n",__func__,start_addr,relocate_minaddr,relocate_maxaddr,page_size);
+    // debug_msg("%s start addr %x relocate_minaddr %x  relocate_maxaddr %x page_size %d \n",__func__,start_addr,relocate_minaddr,relocate_maxaddr,page_size);
 
     mprotect((void*)start_addr,PAGE_SIZE*page_size,PROT_READ | PROT_WRITE);
 
     if (si->plt_rel != NULL) {
 
-        debug_msg("[ relocating %s plt]\n", si->name);
+        // debug_msg("[ relocating %s plt]\n", si->name);
         
         if (relocate_soinfo(si, si->plt_rel, si->plt_rel_count, needed)) {
             goto err;
@@ -584,7 +573,7 @@ int  loader_addr::load_relocate(soinfo* si,soinfo *needed)
 
     if (si->rel != NULL) {
 
-        debug_msg("[ relocating %s ]\n", si->name);
+        // debug_msg("[ relocating %s ]\n", si->name);
 
         if (relocate_soinfo(si, si->rel, si->rel_count, needed)) {
             goto err;
