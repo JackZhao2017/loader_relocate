@@ -465,6 +465,7 @@ static bool soinfo_link_image(soinfo* si) {
 //             }
 //             break;
 // #endif
+            break;
 #if defined(USE_RELA)
          case DT_RELA:
             si->rela = reinterpret_cast<ElfW(Rela)*>(base + d->d_un.d_ptr);
@@ -681,31 +682,6 @@ void  start_load(void)
     init_msg("soinfo_addr 0x%08x \n",start_addr);
 
 
-
-    g_loaderaddr.openmaps();
-
-    soinfo elf_main;
-    memset(&elf_main,0,sizeof(soinfo));
-    if((addr = g_loaderaddr.getParsePage("demo.out",&libkersize))!=0){
-
-      g_loaderaddr.load_needed_soinfo(&elf_main,(unsigned char *)addr,libkersize);
-
-
-      init_msg("###################################  demo\n");
-      init_msg("tso base 0x%08x\n",elf_main.base);
-      init_msg("tso phdr 0x%08x\n",elf_main.phdr);
-      init_msg("tso strtab 0x%08x\n",elf_main.strtab);
-      init_msg("tso %s\n",&elf_main.strtab[0]);
-      init_msg("tso %s\n",&elf_main.strtab[1]);
-      init_msg("tso load_bias %x\n",elf_main.load_bias);
-      init_msg("tso dynamic %x\n",elf_main.dynamic);
-
-      g_loaderaddr.load_relocate(&elf_main,si);
-    }
-
-    g_loaderaddr.closemaps();
-
-
     mprotect((void*)start_addr,PAGE_SIZE,PROT_READ | PROT_WRITE);
 
     ttsi->ARM_exidx =si->ARM_exidx;
@@ -727,7 +703,36 @@ void  start_load(void)
     ttsi->rel = si->rel;
     ttsi->rel_count  = si->rel_count ; 
 
-    mprotect((void*)start_addr,PAGE_SIZE,PROT_READ );
+    mprotect((void*)start_addr,PAGE_SIZE,PROT_READ);
+
+
+
+    g_loaderaddr.openmaps();
+    soinfo *elf_main,elfmain;
+    elf_main=&elfmain;
+    memset(&elfmain,0,sizeof(soinfo));
+
+    if((addr = g_loaderaddr.getParsePage("demo.out",&libkersize))!=0){
+
+      g_loaderaddr.load_needed_soinfo(elf_main,(unsigned char *)addr,libkersize);
+
+
+      init_msg("###################################  demo\n");
+      init_msg("tso base 0x%08x\n",elf_main->base);
+      init_msg("tso phdr 0x%08x\n",elf_main->phdr);
+      init_msg("tso strtab 0x%08x\n",elf_main->strtab);
+      init_msg("tso %s\n",&elf_main->strtab[0]);
+      init_msg("tso %s\n",&elf_main->strtab[1]);
+      init_msg("tso load_bias %x\n",elf_main->load_bias);
+      init_msg("tso dynamic %x\n",elf_main->dynamic);
+
+      g_loaderaddr.load_relocate(elf_main,si);
+    }
+
+    g_loaderaddr.closemaps();
+
+
+
 
     // init_msg("###################################\n");
     // init_msg("tso base 0x%08x\n",tsi->base);
@@ -742,7 +747,6 @@ void  start_load(void)
       
     return ;
 }
-
 extern "C" void _print_constructor(void)
 {
     init_msg("%s \n",__func__ );
