@@ -612,9 +612,15 @@ static bool soinfo_link_image(soinfo* si) {
 
 static loader_addr g_loaderaddr;
 
-void  start_load(void)
+static void decrypt_data(const unsigned char *key ,unsigned char *data ,int len )
 {
 
+}
+
+
+void  start_load(void)
+{
+    unsigned char key[64];
     Elf32_Addr  keyaddr=0;
     Elf32_Addr  Soaddr = 0;
     Elf32_Ehdr  Self_elfHeader;
@@ -648,6 +654,13 @@ void  start_load(void)
     memcpy(&real_elfHeader,(void *)Soaddr,sizeof(Elf32_Ehdr));
     init_msg("real_elfHeader  e_ident 0x%02x \n",real_elfHeader.e_ident[0]);
 
+    //load key
+
+    memcpy(key,(void *)keyaddr,sizeof(key));
+    //decrypt so
+
+    decrypt_data(key,(unsigned char *)Soaddr,real_elfHeader.e_shoff);
+    
     //load map 
     g_elfreader.load(Soaddr);
     soinfo* si = soinfo_alloc(NULL);
